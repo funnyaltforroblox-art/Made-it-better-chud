@@ -1,4 +1,4 @@
--- Delta Compatible Rigid Head-Rotation Bound Solid Camera
+-- Delta Compatible Position-Fixed, Rotation-Free Solid Camera
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
@@ -7,8 +7,16 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
--- Absolute Coordinate Adjustments (X: Left/Right, Y: Up/Down, Z: Forward/Back relative to head face)
-local customOffset = Vector3.new(0, 0.2, 1.0) 
+-- Absolute Coordinate Adjustments (X: Left/Right, Y: Up/Down, Z: Forward/Back)
+local customOffset = Vector3.new(0, 0.5, 1.2)
+
+-- Manual rotation angles for smooth, zero-delay panning
+local cameraAngleX = 0
+local cameraAngleY = 0
+
+-- Touch panning tracking (isolates right-side screen to ignore movement joysticks)
+local panningInput = nil
+local lastPanPosition = nil
 
 -- Setup zoom limits for pinch-zoom out
 local function setupCamera()
@@ -23,7 +31,42 @@ if player.Character then
 	task.spawn(setupCamera)
 end
 
--- Render loop to bind camera position AND rotation precisely to the head
+-- Isolate touch panning to the right side of the screen (away from movement joysticks)
+UserInputService.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton2 then
+		if input.Position.X > camera.ViewportSize.X * 0.35 then
+			panningInput = input
+			lastPanPosition = input.Position
+		end
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input == panningInput then
+		panningInput = nil
+		lastPanPosition = nil
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == panningInput then
+		local currentPos = input.Position
+		local delta = currentPos - lastPanPosition
+		lastPanPosition = currentPos
+		
+		local character = player.Character
+		if character and character:FindFirstChild("Head") then
+			local camDist = (camera.CFrame.Position - character.Head.Position).Magnitude
+			if camDist <= 2.0 then
+				-- High-responsiveness multiplier matching standard look speeds
+				cameraAngleX = cameraAngleX - delta.X * 0.004
+				cameraAngleY = math.clamp(cameraAngleY - delta.Y * 0.004, -1.5, 1.5)
+			end
+		end
+	end
+end)
+
+-- Main Render Loop: Fixes position to the head while allowing free rotation
 RunService.RenderStepped:Connect(function()
 	pcall(function()
 		local character = player.Character
@@ -34,15 +77,18 @@ RunService.RenderStepped:Connect(function()
 		
 		local camDist = (camera.CFrame.Position - head.Position).Magnitude
 		
-		if camDist <= 1.8 then
-			-- Switch to Scriptable so we can explicitly match head rotation and position perfectly
+		if camDist <= 2.0 then
 			camera.CameraType = Enum.CameraType.Scriptable
 			
-			-- Multiply head's CFrame by our custom X, Y, Z coordinates so it acts like a rigid solid part on the head
-			camera.CFrame = head.CFrame * CFrame.new(customOffset)
+			-- Base rotation built from player look inputs combined with head position
+			local rotationCF = CFrame.new(head.Position) * CFrame.Angles(0, cameraAngleX, 0) * CFrame.Angles(cameraAngleY, 0, 0)
+			
+			-- Apply rigid position lock + custom X, Y, Z coordinate offset
+			camera.CFrame = rotationCF * CFrame.new(customOffset)
 		else
-			-- When pinch-zoomed out, restore default third-person camera
 			camera.CameraType = Enum.CameraType.Custom
+			cameraAngleX = 0
+			cameraAngleY = 0
 		end
 	end)
 end)
@@ -169,8 +215,8 @@ local function createButton(text, posY, callback)
 end
 
 -- Coordinate Control Bindings
-createButton("Reset to Default (0, 0.2, 1.0)", 60, function()
-	customOffset = Vector3.new(0, 0.2, 1.0)
+createButton("Reset to Default (0, 0.5, 1.2)", 60, function()
+	customOffset = Vector3.new(0, 0.5, 1.2)
 end)
 
 createButton("X +0.5 (Right) / X -0.5 (Left)", 93, function()
@@ -178,7 +224,7 @@ createButton("X +0.5 (Right) / X -0.5 (Left)", 93, function()
 end)
 
 createButton("Y +0.5 (Up) / Y -0.5 (Down)", 126, function()
-	customOffset = Vector3.new(customOffset.X, customOffset.Y == 0.2 and 0.7 or (customOffset.Y == 0.7 and -0.3 or 0.2), customOffset.Z)
+	customOffset = Vector3.new(customOffset.X, customOffset.Y == 0.5 and 1.0 or (customOffset.Y == 1.0 and 0 or 0.5), customOffset.Z)
 end)
 
 createButton("Z +0.5 (Forward - Out of head)", 159, function()
@@ -194,4 +240,4 @@ createButton("Close Menu", 235, function()
 	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 end)
 
-print("True Head-RotDUDEUEUEn Locked Camera loaded successfully!")
+print("Position-Fixed, Rotation-Free Solid Camera loaded successfully!")
