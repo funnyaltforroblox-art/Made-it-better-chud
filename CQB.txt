@@ -1,4 +1,4 @@
--- Delta Compatible Rigid Solid-Part Camera with Smooth Panning & Coordinate GUI
+-- Delta Compatible Solid Camera (Tracks Torso/Head Rotations & Custom Sensitivity)
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
@@ -10,11 +10,18 @@ local camera = workspace.CurrentCamera
 -- Absolute Coordinate Adjustments (X: Left/Right, Y: Up/Down, Z: Forward/Back)
 local customOffset = Vector3.new(0, 0.5, 1.2)
 
--- Rotation tracking for smooth first-person panning
-local cameraAngleX = 0
-local cameraAngleY = 0
+-- Sensitivity multiplier to fine-tune look speed
+local lookSensitivity = 1.5
 
--- Set up zoom limits to allow pinch-zooming out
+-- Manual view look offsets added on top of head rotation
+local yawOffset = 0
+local pitchOffset = 0
+
+-- Tracking for touch panning (ignoring left-side movement thumbstick)
+local panningInput = nil
+local lastPanPosition = nil
+
+-- Setup zoom limits for pinch-zoom out
 local function setupCamera()
 	pcall(function()
 		player.CameraMinZoomDistance = 0.5
@@ -27,25 +34,43 @@ if player.Character then
 	task.spawn(setupCamera)
 end
 
--- Capture touch and mouse drag inputs for smooth first-person panning
-UserInputService.InputChanged:Connect(function(input)
-	local character = player.Character
-	if not character or not character:FindFirstChild("Head") then return end
-	
-	local head = character.Head
-	local camDist = (camera.CFrame.Position - head.Position).Magnitude
-	
-	-- Only pan when active in first person
-	if camDist <= 2.0 then
-		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
-			local delta = input.Delta
-			cameraAngleX = cameraAngleX - delta.X * 0.005 -- Horizontal look sensitivity
-			cameraAngleY = math.clamp(cameraAngleY - delta.Y * 0.005, -1.5, 1.5) -- Vertical flip prevention
+-- Isolate touch panning to the right side of the screen
+UserInputService.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton2 then
+		local pos = input.Position
+		-- Ignore left 35% of the screen where movement joysticks usually reside
+		if pos.X > camera.ViewportSize.X * 0.35 then
+			panningInput = input
+			lastPanPosition = pos
 		end
 	end
 end)
 
--- Main rigid camera update loop (Zero wobble, perfect solid-part lock)
+UserInputService.InputEnded:Connect(function(input)
+	if input == panningInput then
+		panningInput = nil
+		lastPanPosition = nil
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == panningInput then
+		local currentPos = input.Position
+		local delta = currentPos - lastPanPosition
+		lastPanPosition = currentPos
+		
+		local character = player.Character
+		if character and character:FindFirstChild("Head") then
+			local camDist = (camera.CFrame.Position - character.Head.Position).Magnitude
+			if camDist <= 2.0 then
+				yawOffset = yawOffset - delta.X * 0.003 * lookSensitivity
+				pitchOffset = math.clamp(pitchOffset - delta.Y * 0.003 * lookSensitivity, -1.5, 1.5)
+			end
+		end
+	end
+end)
+
+-- Main camera update loop tracking head/torso rotation matrices
 RunService.RenderStepped:Connect(function()
 	pcall(function()
 		local character = player.Character
@@ -57,18 +82,20 @@ RunService.RenderStepped:Connect(function()
 		local camDist = (camera.CFrame.Position - head.Position).Magnitude
 		
 		if camDist <= 2.0 then
-			-- Switch to Scriptable so the camera is rigidly locked without physics/movement drift
 			camera.CameraType = Enum.CameraType.Scriptable
 			
-			-- Build rigid CFrame anchored strictly to head position + pan angles + custom X,Y,Z coordinates
-			local baseCF = CFrame.new(head.Position) * CFrame.Angles(0, cameraAngleX, 0) * CFrame.Angles(cameraAngleY, 0, 0)
-			camera.CFrame = baseCF * CFrame.new(customOffset)
+			-- Extract head's actual rotation (which is driven by torso twists and head-look mechanics)
+			local headRotationOnly = head.CFrame - head.Position
+			
+			-- Combine head rotation with user look offset angles
+			local adjustedRotation = headRotationOnly * CFrame.Angles(0, yawOffset, 0) * CFrame.Angles(pitchOffset, 0, 0)
+			
+			-- Position camera rigidly at head position using exact X, Y, Z coordinates
+			camera.CFrame = CFrame.new(head.Position) * adjustedRotation * CFrame.new(customOffset)
 		else
-			-- When pinch-zoomed out, release back to normal third-person camera
 			camera.CameraType = Enum.CameraType.Custom
-			-- Reset angles so re-entering first person matches current head orientation
-			cameraAngleX = 0
-			cameraAngleY = 0
+			yawOffset = 0
+			pitchOffset = 0
 		end
 	end)
 end)
@@ -101,7 +128,7 @@ toggleCorner.Parent = toggleBtn
 
 -- Main Control Panel Frame
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 250, 0, 280)
+frame.Size = UDim2.new(0, 250, 0, 310)
 frame.Position = UDim2.new(0, 20, 0, 65)
 frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 frame.BorderSizePixel = 0
@@ -148,33 +175,33 @@ end)
 
 -- Title
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 30)
+title.Size = UDim2.new(1, 0, 0, 25)
 title.BackgroundTransparency = 1
-title.Text = "Solid Coordinate Adjuster"
+title.Text = "Solid Cam Adjuster"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 13
 title.Font = Enum.Font.GothamBold
 title.Parent = frame
 
--- Info Label showing exact coordinates
+-- Info Label showing coordinates and sensitivity
 local infoLabel = Instance.new("TextLabel")
 infoLabel.Size = UDim2.new(1, 0, 0, 25)
-infoLabel.Position = UDim2.new(0, 0, 0, 30)
+infoLabel.Position = UDim2.new(0, 0, 0, 25)
 infoLabel.BackgroundTransparency = 1
 infoLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-infoLabel.TextSize = 12
+infoLabel.TextSize = 11
 infoLabel.Font = Enum.Font.GothamBold
 infoLabel.Parent = frame
 
 local function updateLabel()
-	infoLabel.Text = string.format("Coords -> X: %.1f | Y: %.1f | Z: %.1f", customOffset.X, customOffset.Y, customOffset.Z)
+	infoLabel.Text = string.format("XYZ: (%.1f, %.1f, %.1f) | Sens: %.1f", customOffset.X, customOffset.Y, customOffset.Z, lookSensitivity)
 end
 updateLabel()
 
 -- Helper function to create adjustment buttons
 local function createButton(text, posY, callback)
 	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0.9, 0, 0, 28)
+	btn.Size = UDim2.new(0.9, 0, 0, 25)
 	btn.Position = UDim2.new(0.05, 0, 0, posY)
 	btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -194,25 +221,34 @@ local function createButton(text, posY, callback)
 	btn.Parent = frame
 end
 
--- Coordinate Control Bindings
-createButton("Reset to Default (0, 0.5, 1.2)", 60, function()
+-- Control Bindings
+createButton("Reset Defaults", 52, function()
 	customOffset = Vector3.new(0, 0.5, 1.2)
+	lookSensitivity = 1.5
+	yawOffset = 0
+	pitchOffset = 0
 end)
 
-createButton("X +0.5 (Right) / X -0.5 (Left)", 93, function()
+createButton("Sensitivity +0.5 / -0.5 (Cycle)", 80, function()
+	lookSensitivity = lookSensitivity + 0.5
+	if lookSensitivity > 3.5 then lookSensitivity = 1.0 end
+end)
+
+createButton("X +0.5 (Right) / X -0.5 (Left)", 108, function()
 	customOffset = Vector3.new(customOffset.X == 0 and 0.5 or (customOffset.X == 0.5 and -0.5 or 0), customOffset.Y, customOffset.Z)
 end)
 
-createButton("Y +0.5 (Up) / Y -0.5 (Down)", 126, function()
+createButton("Y +0.5 (Up) / Y -0.5 (Down)", 136, function()
 	customOffset = Vector3.new(customOffset.X, customOffset.Y == 0.5 and 1.0 or (customOffset.Y == 1.0 and 0 or 0.5), customOffset.Z)
 end)
 
-createButton("Z +0.5 (Forward - Out of head)", 159, function()
+createButton("Z +0.5 (Forward) / Z -0.5 (Back)", 164, function()
 	customOffset = customOffset + Vector3.new(0, 0, 0.5)
+	if customOffset.Z > 2.5 then customOffset = Vector3.new(customOffset.X, customOffset.Y, 0.5) end
 end)
 
-createButton("Z -0.5 (Backward - Into head)", 192, function()
-	customOffset = customOffset - Vector3.new(0, 0, 0.5)
+createButton("Quick Center Head Offset", 192, function()
+	customOffset = Vector3.new(0, 0, 0)
 end)
 
 createButton("Close Menu", 235, function()
@@ -220,4 +256,4 @@ createButton("Close Menu", 235, function()
 	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 end)
 
-print("Rigid Panning-Supported Solid CaUPDATEDUPADEed successfully!")
+print("Torso/Head Tracking Solid Camera loaded!")
