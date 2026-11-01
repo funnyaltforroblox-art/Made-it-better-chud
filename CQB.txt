@@ -190,4 +190,4 @@ createButton("Close Menu", 235, function()
 	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 end)
 
-print("Fixed Movement & Zoom Solid-Part Camera loaded!")
+print("Fixed Monoment & Zoom Solid-Part Camera loaded!")
