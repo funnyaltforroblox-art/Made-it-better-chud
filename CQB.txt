@@ -1,4 +1,4 @@
--- Delta Compatible Solid-Part Head Camera with Mobile-Friendly Dragging
+-- Delta Compatible Solid-Part Head Camera (Fixed Panning & Zoom-Out)
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
@@ -8,16 +8,12 @@ local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
 -- Absolute Coordinate Adjustments (X, Y, Z)
-local customOffset = Vector3.new(0, 0.5, 1) -- Z set to 1 forward so it's safely out of the head mesh
+local customOffset = Vector3.new(0, 0.5, 1) -- Z = 1 forward so it's safely out of the head mesh
 
--- Rotation tracking angles to prevent violent spinning
-local cameraAngleX = 0
-local cameraAngleY = 0
-
--- Setup zoom limits for pinch-zoom
+-- Ensure zoom limits allow zooming out
 local function setupCamera()
-	player.CameraMinZoomDistance = 0
-	player.CameraMaxZoomDistance = 20
+	player.CameraMinZoomDistance = 0.5
+	player.CameraMaxZoomDistance = 20 -- Allows zooming out
 end
 
 player.CharacterAdded:Connect(setupCamera)
@@ -25,44 +21,26 @@ if player.Character then
 	task.spawn(setupCamera)
 end
 
--- Handle touch/mouse drag for looking around smoothly without breaking
-UserInputService.InputChanged:Connect(function(input, gameProcessed)
-	local character = player.Character
-	if not character or not character:FindFirstChild("Head") then return end
-	
-	local camDist = (camera.CFrame.Position - character.Head.Position).Magnitude
-	if camDist <= 1.5 then -- Only capture look delta when in first person
-		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
-			local delta = input.Delta
-			cameraAngleX = cameraAngleX - delta.X * 0.005 -- Sensitivity
-			cameraAngleY = math.clamp(cameraAngleY - delta.Y * 0.005, -1.5, 1.5) -- Prevent over-flipping vertical
-		end
-	end
-end)
-
--- Render loop to keep the camera locked like a solid part with custom coordinate offsets
+-- Render loop to handle solid-part perspective vs free zoom-out
 RunService.RenderStepped:Connect(function()
 	local character = player.Character
 	if not character or not character:FindFirstChild("Head") then return end
 	
 	local head = character.Head
+	
+	-- Check current camera zoom distance based on actual field of view/position from head
 	local camDist = (camera.CFrame.Position - head.Position).Magnitude
 	
-	-- If zoomed in close (First person active)
+	-- If player pinches in close, lock to solid-part head view
 	if camDist <= 1.5 then
 		camera.CameraType = Enum.CameraType.Scriptable
 		
-		-- Create a rotation CFrame based on player drag input + head orientation
-		local rotCF = CFrame.new(head.Position) * CFrame.Angles(0, cameraAngleX, 0) * CFrame.Angles(cameraAngleY, 0, 0)
-		
-		-- Apply solid part offset relative to the rotation view
-		camera.CFrame = rotCF * CFrame.new(customOffset)
+		-- Use the head's rotation directly so mouse/touch panning works naturally via Roblox camera movement
+		local headRotation = head.CFrame - head.Position
+		camera.CFrame = CFrame.new(head.Position) * headRotation * CFrame.new(customOffset)
 	else
-		-- Revert to default Roblox camera when pinch-zoomed out
+		-- When player pinch-zooms out, release scriptable mode so default camera/zoom works
 		camera.CameraType = Enum.CameraType.Custom
-		-- Reset angles to match current head view when re-entering
-		cameraAngleX = 0
-		cameraAngleY = 0
 	end
 end)
 
@@ -106,7 +84,7 @@ frameCorner.CornerRadius = UDim.new(0, 8)
 frameCorner.Parent = frame
 
 -- Robust Mobile-Friendly Draggable Implementation
-local dragging, dragInput, dragStart, startPos
+local dragging, dragStart, startPos
 
 frame.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -213,4 +191,4 @@ createButton("Close Menu", 235, function()
 	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 end)
 
-print("Draggable Solid-Part Camera loaded successfully!")
+print("Solid-Part Camera with working zoom/pan loaded successfully!")
