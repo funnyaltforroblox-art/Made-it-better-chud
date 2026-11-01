@@ -1,19 +1,18 @@
--- Delta Compatible Solid-Part Head Camera (Fixed Panning & Zoom-Out)
+-- Delta Compatible Solid-Part Camera with Free Movement & Working Zoom
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
-local camera = workspace.CurrentCamera
 
 -- Absolute Coordinate Adjustments (X, Y, Z)
-local customOffset = Vector3.new(0, 0.5, 1) -- Z = 1 forward so it's safely out of the head mesh
+local customOffset = Vector3.new(0, 0, 1.5) -- Z = 1.5 forward so it's safely out of the head mesh
 
--- Ensure zoom limits allow zooming out
+-- Setup zoom limits so player can pinch-zoom out and back in
 local function setupCamera()
 	player.CameraMinZoomDistance = 0.5
-	player.CameraMaxZoomDistance = 20 -- Allows zooming out
+	player.CameraMaxZoomDistance = 20
 end
 
 player.CharacterAdded:Connect(setupCamera)
@@ -21,26 +20,26 @@ if player.Character then
 	task.spawn(setupCamera)
 end
 
--- Render loop to handle solid-part perspective vs free zoom-out
+-- Update camera offset continuously based on exact coordinates
 RunService.RenderStepped:Connect(function()
 	local character = player.Character
-	if not character or not character:FindFirstChild("Head") then return end
+	if not character or not character:FindFirstChild("Humanoid") then return end
 	
-	local head = character.Head
+	local humanoid = character.Humanoid
+	local camera = workspace.CurrentCamera
 	
-	-- Check current camera zoom distance based on actual field of view/position from head
-	local camDist = (camera.CFrame.Position - head.Position).Magnitude
-	
-	-- If player pinches in close, lock to solid-part head view
-	if camDist <= 1.5 then
-		camera.CameraType = Enum.CameraType.Scriptable
+	-- Check current zoom distance to see if user is in first person or zoomed out
+	local head = character:FindFirstChild("Head")
+	if head then
+		local camDist = (camera.CFrame.Position - head.Position).Magnitude
 		
-		-- Use the head's rotation directly so mouse/touch panning works naturally via Roblox camera movement
-		local headRotation = head.CFrame - head.Position
-		camera.CFrame = CFrame.new(head.Position) * headRotation * CFrame.new(customOffset)
-	else
-		-- When player pinch-zooms out, release scriptable mode so default camera/zoom works
-		camera.CameraType = Enum.CameraType.Custom
+		if camDist <= 1.8 then
+			-- In first person: Apply exact coordinate offsets while keeping movement active
+			humanoid.CameraOffset = customOffset
+		else
+			-- Zoomed out: Reset offset so default camera works normally
+			humanoid.CameraOffset = Vector3.new(0, 0, 0)
+		end
 	end
 end)
 
@@ -166,8 +165,8 @@ local function createButton(text, posY, callback)
 end
 
 -- Coordinate Control Bindings
-createButton("Reset to Default (0, 0.5, 1)", 60, function()
-	customOffset = Vector3.new(0, 0.5, 1)
+createButton("Reset to Default (0, 0, 1.5)", 60, function()
+	customOffset = Vector3.new(0, 0, 1.5)
 end)
 
 createButton("X +0.5 (Right) / X -0.5 (Left)", 93, function()
@@ -191,4 +190,4 @@ createButton("Close Menu", 235, function()
 	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 end)
 
-print("Solid-Part Camera with working zoom/pan loaded successfully!")
+print("Fixed Movement & Zoom Solid-Part Camera loaded!")
