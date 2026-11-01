@@ -1,4 +1,4 @@
--- Delta Compatible Solid-Part Camera with Free Movement & Working Zoom
+-- Delta Compatible Local-Space Solid Camera (Respects Head Limits & Movement)
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
@@ -6,10 +6,10 @@ local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 
--- Absolute Coordinate Adjustments (X, Y, Z)
-local customOffset = Vector3.new(0, 0, 1.5) -- Z = 1.5 forward so it's safely out of the head mesh
+-- Absolute Coordinate Adjustments (X, Y, Z relative to head orientation)
+local customOffset = Vector3.new(0, 0, 1.2) -- X: Left/Right, Y: Up/Down, Z: Forward (out of head)
 
--- Setup zoom limits so player can pinch-zoom out and back in
+-- Set up camera zoom limits for pinch-zoom functionality
 local function setupCamera()
 	player.CameraMinZoomDistance = 0.5
 	player.CameraMaxZoomDistance = 20
@@ -20,24 +20,24 @@ if player.Character then
 	task.spawn(setupCamera)
 end
 
--- Update camera offset continuously based on exact coordinates
+-- Render loop to apply local-space head offset without blocking movement or head limits
 RunService.RenderStepped:Connect(function()
 	local character = player.Character
 	if not character or not character:FindFirstChild("Humanoid") then return end
 	
 	local humanoid = character.Humanoid
+	local head = character:FindFirstChild("Head")
 	local camera = workspace.CurrentCamera
 	
-	-- Check current zoom distance to see if user is in first person or zoomed out
-	local head = character:FindFirstChild("Head")
 	if head then
 		local camDist = (camera.CFrame.Position - head.Position).Magnitude
 		
 		if camDist <= 1.8 then
-			-- In first person: Apply exact coordinate offsets while keeping movement active
+			-- First person active: Apply offset in local object space so it respects 
+			-- the game's head rotation limits and allows normal character movement.
 			humanoid.CameraOffset = customOffset
 		else
-			-- Zoomed out: Reset offset so default camera works normally
+			-- Zoomed out: Reset offset so default third-person camera works cleanly
 			humanoid.CameraOffset = Vector3.new(0, 0, 0)
 		end
 	end
@@ -165,8 +165,8 @@ local function createButton(text, posY, callback)
 end
 
 -- Coordinate Control Bindings
-createButton("Reset to Default (0, 0, 1.5)", 60, function()
-	customOffset = Vector3.new(0, 0, 1.5)
+createButton("Reset to Default (0, 0, 1.2)", 60, function()
+	customOffset = Vector3.new(0, 0, 1.2)
 end)
 
 createButton("X +0.5 (Right) / X -0.5 (Left)", 93, function()
@@ -190,4 +190,4 @@ createButton("Close Menu", 235, function()
 	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 end)
 
-print("Fixed Monoment & Zoom Solid-Part Camera loaded!")
+print("Compatible He-Limit Solid Camera loaded successfully!")
