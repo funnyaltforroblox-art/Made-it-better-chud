@@ -220,4 +220,4 @@ createButton("Close Menu", 235, function()
 	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 end)
 
-print("Rigid Panning-Supported Solid Camera loaded successfully!")
+print("Rigid Panning-Supported Solid CaUPDATEDUPADEed successfully!")
