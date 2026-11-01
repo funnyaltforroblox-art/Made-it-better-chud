@@ -1,60 +1,58 @@
--- Delta Compatible First-Person Script with Pinch-Zoom Toggle & Draggable UI
+-- Delta Compatible Solid-Part Head Camera with Absolute X, Y, Z Coordinates
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
-local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
-local isFirstPerson = true
+-- Absolute Coordinate Adjustments (Change these or use the GUI)
+local customOffset = Vector3.new(0, 0.5, 0) -- X (Left/Right), Y (Up/Down), Z (Forward/Back)
 
--- Function to handle camera zoom and first-person enforcement
-local function setupFirstPerson()
-	local character = player.Character or player.CharacterAdded:Wait()
-	local humanoid = character:WaitForChild("Humanoid")
-	
-	-- Allow normal zoom bounds so pinch zoom works
+-- Function to set camera type to Scriptable when in first-person
+local function setupCamera()
 	player.CameraMinZoomDistance = 0
-	player.CameraMaxZoomDistance = 20 -- Allow zooming out up to 20 studs
+	player.CameraMaxZoomDistance = 20 -- Allows pinch-zoom out
 end
 
-player.CharacterAdded:Connect(setupFirstPerson)
+player.CharacterAdded:Connect(setupCamera)
 if player.Character then
-	task.spawn(setupFirstPerson)
+	task.spawn(setupCamera)
 end
 
--- Monitor camera distance to automatically toggle first person state via pinch zoom
+-- Render loop to force solid part perspective and absolute coordinates
 RunService.RenderStepped:Connect(function()
 	local character = player.Character
 	if not character or not character:FindFirstChild("Head") then return end
 	
-	-- Calculate distance from camera to head to detect if user pinch-zoomed out
-	local headPos = character.Head.Position
-	local camDist = (camera.CFrame.Position - headPos).Magnitude
+	local head = character.Head
+	local camDist = (camera.CFrame.Position - head.Position).Magnitude
 	
-	-- If zoom distance is very small, lock to true first person
-	if camDist <= 1.0 then
-		isFirstPerson = true
-		player.CameraMinZoomDistance = 0
+	-- If zoomed in close (First person active)
+	if camDist <= 1.2 then
+		camera.CameraType = Enum.CameraType.Scriptable
+		
+		-- Treats the camera like a solid part attached to the head using exact coordinates
+		-- Multiplying by head.CFrame makes the X, Y, Z strictly relative to the head's rotation (Front face forward)
+		camera.CFrame = head.CFrame * CFrame.new(customOffset)
 	else
-		-- User has pinch-zoomed out
-		isFirstPerson = false
+		-- Revert to default Roblox camera when pinch-zoomed out
+		camera.CameraType = Enum.CameraType.Custom
 	end
 end)
 
 -- Remove old GUI if it exists
-if CoreGui:FindFirstChild("AdvancedFPCameraUI") then
-	CoreGui.AdvancedFPCameraUI:Destroy()
+if CoreGui:FindFirstChild("SolidFPCameraUI") then
+	CoreGui.SolidFPCameraUI:Destroy()
 end
 
 -- Create ScreenGui
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "AdvancedFPCameraUI"
+screenGui.Name = "SolidFPCameraUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = CoreGui
 
--- Toggle Button (To open/close the menu)
+-- Toggle Button
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(0, 110, 0, 35)
 toggleBtn.Position = UDim2.new(0, 20, 0, 20)
@@ -62,7 +60,7 @@ toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 toggleBtn.TextSize = 13
 toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.Text = "📷 FP Menu"
+toggleBtn.Text = "📷 Solid Cam"
 toggleBtn.Parent = screenGui
 
 local toggleCorner = Instance.new("UICorner")
@@ -71,11 +69,11 @@ toggleCorner.Parent = toggleBtn
 
 -- Main Draggable Control Panel
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 240, 0, 260)
+frame.Size = UDim2.new(0, 250, 0, 280)
 frame.Position = UDim2.new(0, 20, 0, 65)
 frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 frame.BorderSizePixel = 0
-frame.Visible = false -- Starts hidden, controlled by toggle button
+frame.Visible = false
 frame.Active = true
 frame.Draggable = true
 frame.Parent = screenGui
@@ -84,7 +82,6 @@ local frameCorner = Instance.new("UICorner")
 frameCorner.CornerRadius = UDim.new(0, 8)
 frameCorner.Parent = frame
 
--- Toggle functionality
 toggleBtn.MouseButton1Click:Connect(function()
 	frame.Visible = not frame.Visible
 	toggleBtn.BackgroundColor3 = frame.Visible and Color3.fromRGB(0, 120, 215) or Color3.fromRGB(40, 40, 40)
@@ -94,36 +91,31 @@ end)
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundTransparency = 1
-title.Text = "Head Camera Adjuster"
+title.Text = "Solid Coordinate Adjuster"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 13
 title.Font = Enum.Font.GothamBold
 title.Parent = frame
 
--- Status / Values Display
+-- Info Label showing exact coordinates
 local infoLabel = Instance.new("TextLabel")
 infoLabel.Size = UDim2.new(1, 0, 0, 25)
 infoLabel.Position = UDim2.new(0, 0, 0, 30)
 infoLabel.BackgroundTransparency = 1
 infoLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-infoLabel.TextSize = 11
-infoLabel.Font = Enum.Font.Gotham
-infoLabel.Text = "Offset: X:0 | Y:0 | Z:0"
+infoLabel.TextSize = 12
+infoLabel.Font = Enum.Font.GothamBold
 infoLabel.Parent = frame
 
--- Function to update offset display text
-local function updateInfoText()
-	local char = player.Character
-	if char and char:FindFirstChild("Humanoid") then
-		local o = char.Humanoid.CameraOffset
-		infoLabel.Text = string.format("Offset: X:%.1f | Y:%.1f | Z:%.1f", o.X, o.Y, o.Z)
-	end
+local function updateLabel()
+	infoLabel.Text = string.format("Coords -> X: %.1f | Y: %.1f | Z: %.1f", customOffset.X, customOffset.Y, customOffset.Z)
 end
+updateLabel()
 
--- Helper to create adjustment buttons
+-- Helper function to create adjustment buttons
 local function createButton(text, posY, callback)
 	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0.9, 0, 0, 26)
+	btn.Size = UDim2.new(0.9, 0, 0, 28)
 	btn.Position = UDim2.new(0.05, 0, 0, posY)
 	btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -137,53 +129,36 @@ local function createButton(text, posY, callback)
 	
 	btn.MouseButton1Click:Connect(function()
 		callback()
-		updateInfoText()
+		updateLabel()
 	end)
 	
 	btn.Parent = frame
 end
 
--- Button Bindings for X, Y, Z Adjustments
-createButton("Reset Offset (0, 0, 0)", 60, function()
-	local char = player.Character
-	if char and char:FindFirstChild("Humanoid") then
-		char.Humanoid.CameraOffset = Vector3.new(0, 0, 0)
-	end
+-- Coordinate Control Bindings
+createButton("Reset to Head Center (0, 0.5, 0)", 60, function()
+	customOffset = Vector3.new(0, 0.5, 0)
 end)
 
-createButton("Move Up (+0.5 Y) / Down (-0.5 Y)", 91, function()
-	local char = player.Character
-	if char and char:FindFirstChild("Humanoid") then
-		local cur = char.Humanoid.CameraOffset
-		char.Humanoid.CameraOffset = Vector3.new(cur.X, (cur.Y == 0 and 0.5 or (cur.Y == 0.5 and -0.5 or 0)), cur.Z)
-	end
+createButton("X +0.5 (Right) / X -0.5 (Left)", 93, function()
+	customOffset = Vector3.new(customOffset.X == 0 and 0.5 or (customOffset.X == 0.5 and -0.5 or 0), customOffset.Y, customOffset.Z)
 end)
 
-createButton("Push Forward (+0.5 Z)", 122, function()
-	local char = player.Character
-	if char and char:FindFirstChild("Humanoid") then
-		char.Humanoid.CameraOffset += Vector3.new(0, 0, 0.5)
-	end
+createButton("Y +0.5 (Up) / Y -0.5 (Down)", 126, function()
+	customOffset = Vector3.new(customOffset.X, customOffset.Y == 0.5 and 1.0 or (customOffset.Y == 1.0 and 0 or 0.5), customOffset.Z)
 end)
 
-createButton("Pull Backward (-0.5 Z)", 153, function()
-	local char = player.Character
-	if char and char:FindFirstChild("Humanoid") then
-		char.Humanoid.CameraOffset -= Vector3.new(0, 0, 0.5)
-	end
+createButton("Z +0.5 (Forward - Out of head)", 159, function()
+	customOffset = customOffset + Vector3.new(0, 0, 0.5)
 end)
 
-createButton("Shift Left (-0.5 X) / Right (+0.5 X)", 184, function()
-	local char = player.Character
-	if char and char:FindFirstChild("Humanoid") then
-		local cur = char.Humanoid.CameraOffset
-		char.Humanoid.CameraOffset = Vector3.new((cur.X == 0 and -0.5 or (cur.X == -0.5 and 0.5 or 0)), cur.Y, cur.Z)
-	end
+createButton("Z -0.5 (Backward - Into head)", 192, function()
+	customOffset = customOffset - Vector3.new(0, 0, 0.5)
 end)
 
-createButton("Close Menu", 220, function()
+createButton("Close Menu", 235, function()
 	frame.Visible = false
 	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 end)
 
-print("Dynamic Pinch-Zoom First-Person Camera loaded!")
+print("Solid-Part Coordinate Camera loaded successfully!")
