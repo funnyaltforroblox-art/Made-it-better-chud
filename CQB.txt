@@ -1,15 +1,16 @@
--- Delta Compatible Native Head-Bound Solid Camera (Full Movement, Panning & Rotation Tracking)
+-- Delta Compatible Rigid Head-Rotation Bound Solid Camera
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
 
--- Absolute Coordinate Adjustments (X: Left/Right, Y: Up/Down, Z: Forward/Back relative to head)
-local customOffset = Vector3.new(0, 0.5, 1.2)
+-- Absolute Coordinate Adjustments (X: Left/Right, Y: Up/Down, Z: Forward/Back relative to head face)
+local customOffset = Vector3.new(0, 0.2, 1.0) 
 
--- Setup zoom limits so pinch-zoom works naturally
+-- Setup zoom limits for pinch-zoom out
 local function setupCamera()
 	pcall(function()
 		player.CameraMinZoomDistance = 0.5
@@ -22,27 +23,26 @@ if player.Character then
 	task.spawn(setupCamera)
 end
 
--- Update camera offset natively every frame based on zoom distance
+-- Render loop to bind camera position AND rotation precisely to the head
 RunService.RenderStepped:Connect(function()
 	pcall(function()
 		local character = player.Character
 		if not character then return end
 		
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		local head = character:FindFirstChild("Head")
-		local camera = workspace.CurrentCamera
+		if not head then return end
 		
-		if humanoid and head and camera then
-			local camDist = (camera.CFrame.Position - head.Position).Magnitude
+		local camDist = (camera.CFrame.Position - head.Position).Magnitude
+		
+		if camDist <= 1.8 then
+			-- Switch to Scriptable so we can explicitly match head rotation and position perfectly
+			camera.CameraType = Enum.CameraType.Scriptable
 			
-			if camDist <= 1.8 then
-				-- First-person active: Apply coordinate offsets in local space
-				-- This binds position and rotation to the head while keeping native look/movement mechanics intact.
-				humanoid.CameraOffset = customOffset
-			else
-				-- Zoomed out: Reset offset for normal third-person view
-				humanoid.CameraOffset = Vector3.new(0, 0, 0)
-			end
+			-- Multiply head's CFrame by our custom X, Y, Z coordinates so it acts like a rigid solid part on the head
+			camera.CFrame = head.CFrame * CFrame.new(customOffset)
+		else
+			-- When pinch-zoomed out, restore default third-person camera
+			camera.CameraType = Enum.CameraType.Custom
 		end
 	end)
 end)
@@ -169,8 +169,8 @@ local function createButton(text, posY, callback)
 end
 
 -- Coordinate Control Bindings
-createButton("Reset to Default (0, 0.5, 1.2)", 60, function()
-	customOffset = Vector3.new(0, 0.5, 1.2)
+createButton("Reset to Default (0, 0.2, 1.0)", 60, function()
+	customOffset = Vector3.new(0, 0.2, 1.0)
 end)
 
 createButton("X +0.5 (Right) / X -0.5 (Left)", 93, function()
@@ -178,7 +178,7 @@ createButton("X +0.5 (Right) / X -0.5 (Left)", 93, function()
 end)
 
 createButton("Y +0.5 (Up) / Y -0.5 (Down)", 126, function()
-	customOffset = Vector3.new(customOffset.X, customOffset.Y == 0.5 and 1.0 or (customOffset.Y == 1.0 and 0 or 0.5), customOffset.Z)
+	customOffset = Vector3.new(customOffset.X, customOffset.Y == 0.2 and 0.7 or (customOffset.Y == 0.7 and -0.3 or 0.2), customOffset.Z)
 end)
 
 createButton("Z +0.5 (Forward - Out of head)", 159, function()
@@ -194,4 +194,4 @@ createButton("Close Menu", 235, function()
 	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 end)
 
-print("Native Head-Bound Solid Camera loaded successfully!")
+print("True Head-Rotation Locked Camera loaded successfully!")
