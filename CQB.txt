@@ -1,4 +1,4 @@
--- Delta Compatible Local-Space Solid Camera (Respects Head Limits & Movement)
+-- Delta Compatible Bulletproof Solid-First-Person Script
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
@@ -6,49 +6,53 @@ local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 
--- Absolute Coordinate Adjustments (X, Y, Z relative to head orientation)
-local customOffset = Vector3.new(0, 0, 1.2) -- X: Left/Right, Y: Up/Down, Z: Forward (out of head)
+-- Absolute Coordinate Adjustments (X: Left/Right, Y: Up/Down, Z: Forward/Back)
+local customOffset = Vector3.new(0, 0, 1.2)
 
--- Set up camera zoom limits for pinch-zoom functionality
-local function setupCamera()
-	player.CameraMinZoomDistance = 0.5
-	player.CameraMaxZoomDistance = 20
+-- Function to apply camera zoom settings safely
+local function applyZoomLimits()
+	pcall(function()
+		player.CameraMinZoomDistance = 0.5
+		player.CameraMaxZoomDistance = 20
+	end)
 end
 
-player.CharacterAdded:Connect(setupCamera)
-if player.Character then
-	task.spawn(setupCamera)
-end
+player.CharacterAdded:Connect(function(character)
+	task.wait(0.5) -- Give character time to load fully
+	applyZoomLimits()
+end)
+applyZoomLimits()
 
--- Render loop to apply local-space head offset without blocking movement or head limits
+-- Core Render Loop (Safe from runtime crashes)
 RunService.RenderStepped:Connect(function()
-	local character = player.Character
-	if not character or not character:FindFirstChild("Humanoid") then return end
-	
-	local humanoid = character.Humanoid
-	local head = character:FindFirstChild("Head")
-	local camera = workspace.CurrentCamera
-	
-	if head then
-		local camDist = (camera.CFrame.Position - head.Position).Magnitude
+	local success, err = pcall(function()
+		local character = player.Character
+		if not character then return end
 		
-		if camDist <= 1.8 then
-			-- First person active: Apply offset in local object space so it respects 
-			-- the game's head rotation limits and allows normal character movement.
-			humanoid.CameraOffset = customOffset
-		else
-			-- Zoomed out: Reset offset so default third-person camera works cleanly
-			humanoid.CameraOffset = Vector3.new(0, 0, 0)
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		local head = character:FindFirstChild("Head")
+		local camera = workspace.CurrentCamera
+		
+		if humanoid and head and camera then
+			local camDist = (camera.CFrame.Position - head.Position).Magnitude
+			
+			if camDist <= 1.8 then
+				-- First-person active: apply coordinate offset locally
+				humanoid.CameraOffset = customOffset
+			else
+				-- Zoomed out: reset offset for normal third-person view
+				humanoid.CameraOffset = Vector3.new(0, 0, 0)
+			end
 		end
-	end
+	end)
 end)
 
--- Remove old GUI if it exists
+-- Clean up any old UI instances
 if CoreGui:FindFirstChild("SolidFPCameraUI") then
 	CoreGui.SolidFPCameraUI:Destroy()
 end
 
--- Create ScreenGui
+-- Create ScreenGui securely in CoreGui
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SolidFPCameraUI"
 screenGui.ResetOnSpawn = false
@@ -69,7 +73,7 @@ local toggleCorner = Instance.new("UICorner")
 toggleCorner.CornerRadius = UDim.new(0, 6)
 toggleCorner.Parent = toggleBtn
 
--- Main Control Panel
+-- Main Control Panel Frame
 local frame = Instance.new("Frame")
 frame.Size = UDim2.new(0, 250, 0, 280)
 frame.Position = UDim2.new(0, 20, 0, 65)
@@ -82,7 +86,7 @@ local frameCorner = Instance.new("UICorner")
 frameCorner.CornerRadius = UDim.new(0, 8)
 frameCorner.Parent = frame
 
--- Robust Mobile-Friendly Draggable Implementation
+-- Mobile-Friendly Draggable Logic
 local dragging, dragStart, startPos
 
 frame.InputBegan:Connect(function(input)
@@ -190,4 +194,4 @@ createButton("Close Menu", 235, function()
 	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 end)
 
-print("Compatible He-Limit Solid Camera loaded successfully!")
+print("Bulletproof Camera Script initialized successfully!")
