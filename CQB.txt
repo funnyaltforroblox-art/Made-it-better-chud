@@ -1,27 +1,47 @@
--- Delta Compatible First-Person Script with Toggleable & Draggable UI
+-- Delta Compatible First-Person Script with Pinch-Zoom Toggle & Draggable UI
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
 
--- Function to enforce strict first-person camera setup
+local isFirstPerson = true
+
+-- Function to handle camera zoom and first-person enforcement
 local function setupFirstPerson()
 	local character = player.Character or player.CharacterAdded:Wait()
 	local humanoid = character:WaitForChild("Humanoid")
 	
-	-- Lock zoom to zero for true first-person
+	-- Allow normal zoom bounds so pinch zoom works
 	player.CameraMinZoomDistance = 0
-	player.CameraMaxZoomDistance = 0
-	
-	-- Ensure camera subject tracks properly
-	workspace.CurrentCamera.CameraSubject = humanoid
+	player.CameraMaxZoomDistance = 20 -- Allow zooming out up to 20 studs
 end
 
 player.CharacterAdded:Connect(setupFirstPerson)
 if player.Character then
 	task.spawn(setupFirstPerson)
 end
+
+-- Monitor camera distance to automatically toggle first person state via pinch zoom
+RunService.RenderStepped:Connect(function()
+	local character = player.Character
+	if not character or not character:FindFirstChild("Head") then return end
+	
+	-- Calculate distance from camera to head to detect if user pinch-zoomed out
+	local headPos = character.Head.Position
+	local camDist = (camera.CFrame.Position - headPos).Magnitude
+	
+	-- If zoom distance is very small, lock to true first person
+	if camDist <= 1.0 then
+		isFirstPerson = true
+		player.CameraMinZoomDistance = 0
+	else
+		-- User has pinch-zoomed out
+		isFirstPerson = false
+	end
+end)
 
 -- Remove old GUI if it exists
 if CoreGui:FindFirstChild("AdvancedFPCameraUI") then
@@ -166,4 +186,4 @@ createButton("Close Menu", 220, function()
 	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 end)
 
-print("Advanced Head-Locked First-Person Camera loaded successfully!")
+print("Dynamic Pinch-Zoom First-Person Camera loaded!")
