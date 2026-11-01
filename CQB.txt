@@ -1,16 +1,14 @@
 -- Delta Compatible First-Person Script with Toggleable & Draggable UI
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
-local RunService = g:GetService("RunService") rescue or RunService... wait:
 local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 
--- Function to enforce strict head-locked first-person camera
+-- Function to enforce strict first-person camera setup
 local function setupFirstPerson()
 	local character = player.Character or player.CharacterAdded:Wait()
 	local humanoid = character:WaitForChild("Humanoid")
-	local head = character:WaitForChild("Head")
 	
 	-- Lock zoom to zero for true first-person
 	player.CameraMinZoomDistance = 0
@@ -98,7 +96,7 @@ local function updateInfoText()
 	local char = player.Character
 	if char and char:FindFirstChild("Humanoid") then
 		local o = char.Humanoid.CameraOffset
-		infoLabel.Text = string.Format("Offset: X:%.1f | Y:%.1f | Z:%.1f", o.X, o.Y, o.Z)
+		infoLabel.Text = string.format("Offset: X:%.1f | Y:%.1f | Z:%.1f", o.X, o.Y, o.Z)
 	end
 end
 
@@ -134,7 +132,6 @@ createButton("Reset Offset (0, 0, 0)", 60, function()
 end)
 
 createButton("Move Up (+0.5 Y) / Down (-0.5 Y)", 91, function()
-	-- Cycles Y offset for convenience
 	local char = player.Character
 	if char and char:FindFirstChild("Humanoid") then
 		local cur = char.Humanoid.CameraOffset
@@ -169,4 +166,4 @@ createButton("Close Menu", 220, function()
 	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 end)
 
-print("Advanced Head-Locked First-Person Camera loaded!")
+print("Advanced Head-Locked First-Person Camera loaded successfully!")
