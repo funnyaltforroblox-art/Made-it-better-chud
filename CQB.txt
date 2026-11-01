@@ -1,53 +1,79 @@
--- Delta Compatible Bulletproof Solid-First-Person Script
+-- Delta Compatible Rigid Solid-Part Camera with Smooth Panning & Coordinate GUI
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
 
 -- Absolute Coordinate Adjustments (X: Left/Right, Y: Up/Down, Z: Forward/Back)
-local customOffset = Vector3.new(0, 0, 1.2)
+local customOffset = Vector3.new(0, 0.5, 1.2)
 
--- Function to apply camera zoom settings safely
-local function applyZoomLimits()
+-- Rotation tracking for smooth first-person panning
+local cameraAngleX = 0
+local cameraAngleY = 0
+
+-- Set up zoom limits to allow pinch-zooming out
+local function setupCamera()
 	pcall(function()
 		player.CameraMinZoomDistance = 0.5
 		player.CameraMaxZoomDistance = 20
 	end)
 end
 
-player.CharacterAdded:Connect(function(character)
-	task.wait(0.5) -- Give character time to load fully
-	applyZoomLimits()
-end)
-applyZoomLimits()
+player.CharacterAdded:Connect(setupCamera)
+if player.Character then
+	task.spawn(setupCamera)
+end
 
--- Core Render Loop (Safe from runtime crashes)
+-- Capture touch and mouse drag inputs for smooth first-person panning
+UserInputService.InputChanged:Connect(function(input)
+	local character = player.Character
+	if not character or not character:FindFirstChild("Head") then return end
+	
+	local head = character.Head
+	local camDist = (camera.CFrame.Position - head.Position).Magnitude
+	
+	-- Only pan when active in first person
+	if camDist <= 2.0 then
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
+			local delta = input.Delta
+			cameraAngleX = cameraAngleX - delta.X * 0.005 -- Horizontal look sensitivity
+			cameraAngleY = math.clamp(cameraAngleY - delta.Y * 0.005, -1.5, 1.5) -- Vertical flip prevention
+		end
+	end
+end)
+
+-- Main rigid camera update loop (Zero wobble, perfect solid-part lock)
 RunService.RenderStepped:Connect(function()
-	local success, err = pcall(function()
+	pcall(function()
 		local character = player.Character
 		if not character then return end
 		
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		local head = character:FindFirstChild("Head")
-		local camera = workspace.CurrentCamera
+		if not head then return end
 		
-		if humanoid and head and camera then
-			local camDist = (camera.CFrame.Position - head.Position).Magnitude
+		local camDist = (camera.CFrame.Position - head.Position).Magnitude
+		
+		if camDist <= 2.0 then
+			-- Switch to Scriptable so the camera is rigidly locked without physics/movement drift
+			camera.CameraType = Enum.CameraType.Scriptable
 			
-			if camDist <= 1.8 then
-				-- First-person active: apply coordinate offset locally
-				humanoid.CameraOffset = customOffset
-			else
-				-- Zoomed out: reset offset for normal third-person view
-				humanoid.CameraOffset = Vector3.new(0, 0, 0)
-			end
+			-- Build rigid CFrame anchored strictly to head position + pan angles + custom X,Y,Z coordinates
+			local baseCF = CFrame.new(head.Position) * CFrame.Angles(0, cameraAngleX, 0) * CFrame.Angles(cameraAngleY, 0, 0)
+			camera.CFrame = baseCF * CFrame.new(customOffset)
+		else
+			-- When pinch-zoomed out, release back to normal third-person camera
+			camera.CameraType = Enum.CameraType.Custom
+			-- Reset angles so re-entering first person matches current head orientation
+			cameraAngleX = 0
+			cameraAngleY = 0
 		end
 	end)
 end)
 
--- Clean up any old UI instances
+-- Remove old GUI if it exists
 if CoreGui:FindFirstChild("SolidFPCameraUI") then
 	CoreGui.SolidFPCameraUI:Destroy()
 end
@@ -169,8 +195,8 @@ local function createButton(text, posY, callback)
 end
 
 -- Coordinate Control Bindings
-createButton("Reset to Default (0, 0, 1.2)", 60, function()
-	customOffset = Vector3.new(0, 0, 1.2)
+createButton("Reset to Default (0, 0.5, 1.2)", 60, function()
+	customOffset = Vector3.new(0, 0.5, 1.2)
 end)
 
 createButton("X +0.5 (Right) / X -0.5 (Left)", 93, function()
@@ -194,4 +220,4 @@ createButton("Close Menu", 235, function()
 	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 end)
 
-print("Bulletpsolidera Script initialized successfully!")
+print("Rigid Panning-Supported Solid Camera loaded successfully!")
