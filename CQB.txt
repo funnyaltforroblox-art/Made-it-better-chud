@@ -1,4 +1,4 @@
--- Delta Compatible Solid-Part Head Camera (Smooth Input Handling)
+-- Delta Compatible Solid-Part Head Camera with Mobile-Friendly Dragging
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
@@ -92,20 +92,47 @@ local toggleCorner = Instance.new("UICorner")
 toggleCorner.CornerRadius = UDim.new(0, 6)
 toggleCorner.Parent = toggleBtn
 
--- Main Draggable Control Panel
+-- Main Control Panel
 local frame = Instance.new("Frame")
 frame.Size = UDim2.new(0, 250, 0, 280)
 frame.Position = UDim2.new(0, 20, 0, 65)
 frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 frame.BorderSizePixel = 0
 frame.Visible = false
-frame.Active = true
-frame.Draggable = true
 frame.Parent = screenGui
 
 local frameCorner = Instance.new("UICorner")
 frameCorner.CornerRadius = UDim.new(0, 8)
 frameCorner.Parent = frame
+
+-- Robust Mobile-Friendly Draggable Implementation
+local dragging, dragInput, dragStart, startPos
+
+frame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = frame.Position
+		
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = input.Position - dragStart
+		frame.Position = UDim2.new(
+			startPos.X.Scale, 
+			startPos.X.Offset + delta.X, 
+			startPos.Y.Scale, 
+			startPos.Y.Offset + delta.Y
+		)
+	end
+end)
 
 toggleBtn.MouseButton1Click:Connect(function()
 	frame.Visible = not frame.Visible
@@ -186,4 +213,4 @@ createButton("Close Menu", 235, function()
 	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 end)
 
-print("Smooth Solid-Part Camera loaded successfully!")
+print("Draggable Solid-Part Camera loaded successfully!")
