@@ -1,18 +1,23 @@
--- Delta Compatible Solid-Part Head Camera with Absolute X, Y, Z Coordinates
+-- Delta Compatible Solid-Part Head Camera (Smooth Input Handling)
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
--- Absolute Coordinate Adjustments (Change these or use the GUI)
-local customOffset = Vector3.new(0, 0.5, 0) -- X (Left/Right), Y (Up/Down), Z (Forward/Back)
+-- Absolute Coordinate Adjustments (X, Y, Z)
+local customOffset = Vector3.new(0, 0.5, 1) -- Z set to 1 forward so it's safely out of the head mesh
 
--- Function to set camera type to Scriptable when in first-person
+-- Rotation tracking angles to prevent violent spinning
+local cameraAngleX = 0
+local cameraAngleY = 0
+
+-- Setup zoom limits for pinch-zoom
 local function setupCamera()
 	player.CameraMinZoomDistance = 0
-	player.CameraMaxZoomDistance = 20 -- Allows pinch-zoom out
+	player.CameraMaxZoomDistance = 20
 end
 
 player.CharacterAdded:Connect(setupCamera)
@@ -20,7 +25,22 @@ if player.Character then
 	task.spawn(setupCamera)
 end
 
--- Render loop to force solid part perspective and absolute coordinates
+-- Handle touch/mouse drag for looking around smoothly without breaking
+UserInputService.InputChanged:Connect(function(input, gameProcessed)
+	local character = player.Character
+	if not character or not character:FindFirstChild("Head") then return end
+	
+	local camDist = (camera.CFrame.Position - character.Head.Position).Magnitude
+	if camDist <= 1.5 then -- Only capture look delta when in first person
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
+			local delta = input.Delta
+			cameraAngleX = cameraAngleX - delta.X * 0.005 -- Sensitivity
+			cameraAngleY = math.clamp(cameraAngleY - delta.Y * 0.005, -1.5, 1.5) -- Prevent over-flipping vertical
+		end
+	end
+end)
+
+-- Render loop to keep the camera locked like a solid part with custom coordinate offsets
 RunService.RenderStepped:Connect(function()
 	local character = player.Character
 	if not character or not character:FindFirstChild("Head") then return end
@@ -29,15 +49,20 @@ RunService.RenderStepped:Connect(function()
 	local camDist = (camera.CFrame.Position - head.Position).Magnitude
 	
 	-- If zoomed in close (First person active)
-	if camDist <= 1.2 then
+	if camDist <= 1.5 then
 		camera.CameraType = Enum.CameraType.Scriptable
 		
-		-- Treats the camera like a solid part attached to the head using exact coordinates
-		-- Multiplying by head.CFrame makes the X, Y, Z strictly relative to the head's rotation (Front face forward)
-		camera.CFrame = head.CFrame * CFrame.new(customOffset)
+		-- Create a rotation CFrame based on player drag input + head orientation
+		local rotCF = CFrame.new(head.Position) * CFrame.Angles(0, cameraAngleX, 0) * CFrame.Angles(cameraAngleY, 0, 0)
+		
+		-- Apply solid part offset relative to the rotation view
+		camera.CFrame = rotCF * CFrame.new(customOffset)
 	else
 		-- Revert to default Roblox camera when pinch-zoomed out
 		camera.CameraType = Enum.CameraType.Custom
+		-- Reset angles to match current head view when re-entering
+		cameraAngleX = 0
+		cameraAngleY = 0
 	end
 end)
 
@@ -136,8 +161,8 @@ local function createButton(text, posY, callback)
 end
 
 -- Coordinate Control Bindings
-createButton("Reset to Head Center (0, 0.5, 0)", 60, function()
-	customOffset = Vector3.new(0, 0.5, 0)
+createButton("Reset to Default (0, 0.5, 1)", 60, function()
+	customOffset = Vector3.new(0, 0.5, 1)
 end)
 
 createButton("X +0.5 (Right) / X -0.5 (Left)", 93, function()
@@ -161,4 +186,4 @@ createButton("Close Menu", 235, function()
 	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 end)
 
-print("Solid-Part Coordinate Camera loaded successfully!")
+print("Smooth Solid-Part Camera loaded successfully!")
