@@ -1,4 +1,4 @@
--- Client-Sided HP Spoofer / Tester (Compatible with Leg-Acessories2.0, UBGA.20, & PerhapsheDOESknow)
+-- Toggleable Client-Sided HP Spoofer / Tester (Compatible with Leg-Acessories2.0, UBGA.20, & PerhapsheDOESknow)
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -20,12 +20,14 @@ if not success or not screenGui.Parent then
 	screenGui.Parent = player:WaitForChild("PlayerGui")
 end
 
+-- Main Control Panel Frame
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 210, 0, 105)
-mainFrame.Position = UDim2.new(0.5, -105, 0.15, 0)
+mainFrame.Position = UDim2.new(0.5, -105, 0.4, -52)
 mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
+mainFrame.Visible = true -- Starts open, can be toggled via button
 mainFrame.Parent = screenGui
 
 local uiCorner = Instance.new("UICorner")
@@ -37,7 +39,29 @@ uiStroke.Color = Color3.fromRGB(0, 200, 130)
 uiStroke.Thickness = 1.5
 uiStroke.Parent = mainFrame
 
--- Title / Drag Handle
+-- Floating Toggle Button (To show/hide the main panel)
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Name = "HPToggleButton"
+toggleBtn.Size = UDim2.new(0, 45, 0, 45)
+toggleBtn.Position = UDim2.new(0.05, 0, 0.15, 0)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.Text = "HP"
+toggleBtn.TextColor3 = Color3.fromRGB(0, 255, 150)
+toggleBtn.TextSize = 13
+toggleBtn.Active = true
+toggleBtn.Parent = screenGui
+
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(1, 0)
+toggleCorner.Parent = toggleBtn
+
+local toggleStroke = Instance.new("UIStroke")
+toggleStroke.Color = Color3.fromRGB(0, 255, 150)
+toggleStroke.Thickness = 1.5
+toggleStroke.Parent = toggleBtn
+
+-- Title / Drag Handle for Main Panel
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(1, 0, 0, 26)
 titleLabel.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
@@ -115,32 +139,40 @@ local lockCorner = Instance.new("UICorner")
 lockCorner.CornerRadius = UDim.new(0, 4)
 lockCorner.Parent = lockBtn
 
--- Dragging Logic (Mouse + Touch)
-local dragging, dragInput, dragStart, startPos
-mainFrame.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging = true
-		dragStart = input.Position
-		startPos = mainFrame.Position
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then
-				dragging = false
-			end
-		end)
-	end
-end)
+-- Generic Dragging Function (Mouse + Touch support)
+local function makeDraggable(guiObject)
+	local dragging, dragInput, dragStart, startPos
+	guiObject.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = guiObject.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+				end
+			end)
+		end
+	end)
+	guiObject.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			dragInput = input
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if input == dragInput and dragging then
+			local delta = input.Position - dragStart
+			guiObject.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+end
 
-mainFrame.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-		dragInput = input
-	end
-end)
+makeDraggable(mainFrame)
+makeDraggable(toggleBtn)
 
-UserInputService.InputChanged:Connect(function(input)
-	if input == dragInput and dragging then
-		local delta = input.Position - dragStart
-		mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-	end
+-- Toggle Menu Visibility on Button Click
+toggleBtn.MouseButton1Click:Connect(function()
+	mainFrame.Visible = not mainFrame.Visible
 end)
 
 -- Health Application Logic
