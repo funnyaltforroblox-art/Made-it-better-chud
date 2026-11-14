@@ -1,7 +1,8 @@
-l-- Client-Sided HP Spoofer / Tester (Compatible with Leg-Acessories2.0, UBGA.20, & PerhapsheDOESknow)
+-- Client-Sided HP Spoofer / Tester (Compatible with Leg-Acessories2.0, UBGA.20, & PerhapsheDOESknow)
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
 
 local player = Players.LocalPlayer
 local targetHP = nil
@@ -11,8 +12,11 @@ local isLocked = false
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "ClientHPSpoofer"
 screenGui.ResetOnSpawn = false
-pcall(function() screenGui.Parent = game:GetService("CoreGui") end)
-if not screenGui.Parent then
+
+local success, err = pcall(function()
+	screenGui.Parent = CoreGui
+end)
+if not success or not screenGui.Parent then
 	screenGui.Parent = player:WaitForChild("PlayerGui")
 end
 
@@ -162,9 +166,10 @@ local function applyClientHP()
 	end
 
 	if newHealth then
-		-- Prevent accidental client-side death state if testing 0 HP
 		if newHealth <= 0 then
-			humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+			pcall(function()
+				humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+			end)
 		end
 		targetHP = newHealth
 		humanoid.Health = newHealth
@@ -206,4 +211,3 @@ RunService.RenderStepped:Connect(function()
 		statusLabel.Text = "HP: -- / -- (--%)"
 	end
 end)
-print("loaded")
