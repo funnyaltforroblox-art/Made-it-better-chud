@@ -1,146 +1,123 @@
--- Delta Compatible Position-Fixed, Rotation-Free Solid Camera
+l-- Client-Sided HP Spoofer / Tester (Compatible with Leg-Acessories2.0, UBGA.20, & PerhapsheDOESknow)
 local Players = game:GetService("Players")
-local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
-local camera = workspace.CurrentCamera
+local targetHP = nil
+local isLocked = false
 
--- Absolute Coordinate Adjustments (X: Left/Right, Y: Up/Down, Z: Forward/Back)
-local customOffset = Vector3.new(0, 0.5, 1.2)
-
--- Manual rotation angles for smooth, zero-delay panning
-local cameraAngleX = 0
-local cameraAngleY = 0
-
--- Touch panning tracking (isolates right-side screen to ignore movement joysticks)
-local panningInput = nil
-local lastPanPosition = nil
-
--- Setup zoom limits for pinch-zoom out
-local function setupCamera()
-	pcall(function()
-		player.CameraMinZoomDistance = 0.5
-		player.CameraMaxZoomDistance = 20
-	end)
-end
-
-player.CharacterAdded:Connect(setupCamera)
-if player.Character then
-	task.spawn(setupCamera)
-end
-
--- Isolate touch panning to the right side of the screen (away from movement joysticks)
-UserInputService.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton2 then
-		if input.Position.X > camera.ViewportSize.X * 0.35 then
-			panningInput = input
-			lastPanPosition = input.Position
-		end
-	end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-	if input == panningInput then
-		panningInput = nil
-		lastPanPosition = nil
-	end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-	if input == panningInput then
-		local currentPos = input.Position
-		local delta = currentPos - lastPanPosition
-		lastPanPosition = currentPos
-		
-		local character = player.Character
-		if character and character:FindFirstChild("Head") then
-			local camDist = (camera.CFrame.Position - character.Head.Position).Magnitude
-			if camDist <= 2.0 then
-				-- High-responsiveness multiplier matching standard look speeds
-				cameraAngleX = cameraAngleX - delta.X * 0.004
-				cameraAngleY = math.clamp(cameraAngleY - delta.Y * 0.004, -1.5, 1.5)
-			end
-		end
-	end
-end)
-
--- Main Render Loop: Fixes position to the head while allowing free rotation
-RunService.RenderStepped:Connect(function()
-	pcall(function()
-		local character = player.Character
-		if not character then return end
-		
-		local head = character:FindFirstChild("Head")
-		if not head then return end
-		
-		local camDist = (camera.CFrame.Position - head.Position).Magnitude
-		
-		if camDist <= 2.0 then
-			camera.CameraType = Enum.CameraType.Scriptable
-			
-			-- Base rotation built from player look inputs combined with head position
-			local rotationCF = CFrame.new(head.Position) * CFrame.Angles(0, cameraAngleX, 0) * CFrame.Angles(cameraAngleY, 0, 0)
-			
-			-- Apply rigid position lock + custom X, Y, Z coordinate offset
-			camera.CFrame = rotationCF * CFrame.new(customOffset)
-		else
-			camera.CameraType = Enum.CameraType.Custom
-			cameraAngleX = 0
-			cameraAngleY = 0
-		end
-	end)
-end)
-
--- Remove old GUI if it exists
-if CoreGui:FindFirstChild("SolidFPCameraUI") then
-	CoreGui.SolidFPCameraUI:Destroy()
-end
-
--- Create ScreenGui securely in CoreGui
+-- UI Setup
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "SolidFPCameraUI"
+screenGui.Name = "ClientHPSpoofer"
 screenGui.ResetOnSpawn = false
-screenGui.Parent = CoreGui
+pcall(function() screenGui.Parent = game:GetService("CoreGui") end)
+if not screenGui.Parent then
+	screenGui.Parent = player:WaitForChild("PlayerGui")
+end
 
--- Toggle Button
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(0, 110, 0, 35)
-toggleBtn.Position = UDim2.new(0, 20, 0, 20)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleBtn.TextSize = 13
-toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.Text = "📷 Solid Cam"
-toggleBtn.Parent = screenGui
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 210, 0, 105)
+mainFrame.Position = UDim2.new(0.5, -105, 0.15, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Parent = screenGui
 
-local toggleCorner = Instance.new("UICorner")
-toggleCorner.CornerRadius = UDim.new(0, 6)
-toggleCorner.Parent = toggleBtn
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(0, 8)
+uiCorner.Parent = mainFrame
 
--- Main Control Panel Frame
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 250, 0, 280)
-frame.Position = UDim2.new(0, 20, 0, 65)
-frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-frame.BorderSizePixel = 0
-frame.Visible = false
-frame.Parent = screenGui
+local uiStroke = Instance.new("UIStroke")
+uiStroke.Color = Color3.fromRGB(0, 200, 130)
+uiStroke.Thickness = 1.5
+uiStroke.Parent = mainFrame
 
-local frameCorner = Instance.new("UICorner")
-frameCorner.CornerRadius = UDim.new(0, 8)
-frameCorner.Parent = frame
+-- Title / Drag Handle
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, 0, 0, 26)
+titleLabel.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
+titleLabel.BorderSizePixel = 0
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.Text = "  CLIENT HP SPOOFER"
+titleLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+titleLabel.TextSize = 11
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = mainFrame
 
--- Mobile-Friendly Draggable Logic
-local dragging, dragStart, startPos
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 8)
+titleCorner.Parent = titleLabel
 
-frame.InputBegan:Connect(function(input)
+-- Current HP Readout
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, -16, 0, 18)
+statusLabel.Position = UDim2.new(0, 8, 0, 30)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Font = Enum.Font.GothamSemibold
+statusLabel.Text = "HP: -- / -- (100%)"
+statusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+statusLabel.TextSize = 11
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.Parent = mainFrame
+
+-- HP Input Box (Supports raw numbers like "25" or percentages like "50%")
+local hpBox = Instance.new("TextBox")
+hpBox.Size = UDim2.new(0, 115, 0, 26)
+hpBox.Position = UDim2.new(0, 8, 0, 52)
+hpBox.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+hpBox.BorderSizePixel = 0
+hpBox.Font = Enum.Font.Gotham
+hpBox.PlaceholderText = "HP or % (e.g. 30%)"
+hpBox.Text = ""
+hpBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+hpBox.TextSize = 11
+hpBox.ClearTextOnFocus = false
+hpBox.Parent = mainFrame
+
+local boxCorner = Instance.new("UICorner")
+boxCorner.CornerRadius = UDim.new(0, 5)
+boxCorner.Parent = hpBox
+
+-- Apply Button
+local applyBtn = Instance.new("TextButton")
+applyBtn.Size = UDim2.new(0, 72, 0, 26)
+applyBtn.Position = UDim2.new(0, 130, 0, 52)
+applyBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 80)
+applyBtn.BorderSizePixel = 0
+applyBtn.Font = Enum.Font.GothamBold
+applyBtn.Text = "SET HP"
+applyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+applyBtn.TextSize = 11
+applyBtn.Parent = mainFrame
+
+local applyCorner = Instance.new("UICorner")
+applyCorner.CornerRadius = UDim.new(0, 5)
+applyCorner.Parent = applyBtn
+
+-- Lock Toggle (Prevents server regeneration/damage from resetting your test HP)
+local lockBtn = Instance.new("TextButton")
+lockBtn.Size = UDim2.new(1, -16, 0, 18)
+lockBtn.Position = UDim2.new(0, 8, 0, 82)
+lockBtn.BackgroundColor3 = Color3.fromRGB(60, 35, 35)
+lockBtn.BorderSizePixel = 0
+lockBtn.Font = Enum.Font.GothamBold
+lockBtn.Text = "LOCK HP: OFF"
+lockBtn.TextColor3 = Color3.fromRGB(240, 120, 120)
+lockBtn.TextSize = 10
+lockBtn.Parent = mainFrame
+
+local lockCorner = Instance.new("UICorner")
+lockCorner.CornerRadius = UDim.new(0, 4)
+lockCorner.Parent = lockBtn
+
+-- Dragging Logic (Mouse + Touch)
+local dragging, dragInput, dragStart, startPos
+mainFrame.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		dragging = true
 		dragStart = input.Position
-		startPos = frame.Position
-		
+		startPos = mainFrame.Position
 		input.Changed:Connect(function()
 			if input.UserInputState == Enum.UserInputState.End then
 				dragging = false
@@ -149,95 +126,84 @@ frame.InputBegan:Connect(function(input)
 	end
 end)
 
-UserInputService.InputChanged:Connect(function(input)
-	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-		local delta = input.Position - dragStart
-		frame.Position = UDim2.new(
-			startPos.X.Scale, 
-			startPos.X.Offset + delta.X, 
-			startPos.Y.Scale, 
-			startPos.Y.Offset + delta.Y
-		)
+mainFrame.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInput = input
 	end
 end)
 
-toggleBtn.MouseButton1Click:Connect(function()
-	frame.Visible = not frame.Visible
-	toggleBtn.BackgroundColor3 = frame.Visible and Color3.fromRGB(0, 120, 215) or Color3.fromRGB(40, 40, 40)
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		local delta = input.Position - dragStart
+		mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
 end)
 
--- Title
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 30)
-title.BackgroundTransparency = 1
-title.Text = "Solid Coordinate Adjuster"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.TextSize = 13
-title.Font = Enum.Font.GothamBold
-title.Parent = frame
+-- Health Application Logic
+local function applyClientHP()
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return end
 
--- Info Label showing exact coordinates
-local infoLabel = Instance.new("TextLabel")
-infoLabel.Size = UDim2.new(1, 0, 0, 25)
-infoLabel.Position = UDim2.new(0, 0, 0, 30)
-infoLabel.BackgroundTransparency = 1
-infoLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-infoLabel.TextSize = 12
-infoLabel.Font = Enum.Font.GothamBold
-infoLabel.Parent = frame
+	local rawText = hpBox.Text:gsub("%s+", "")
+	if rawText == "" then return end
 
-local function updateLabel()
-	infoLabel.Text = string.format("Coords -> X: %.1f | Y: %.1f | Z: %.1f", customOffset.X, customOffset.Y, customOffset.Z)
-end
-updateLabel()
+	local newHealth
+	if rawText:sub(-1) == "%" then
+		local pct = tonumber(rawText:sub(1, -2))
+		if pct then
+			newHealth = (math.clamp(pct, 0, 100) / 100) * humanoid.MaxHealth
+		end
+	else
+		local val = tonumber(rawText)
+		if val then
+			newHealth = math.clamp(val, 0, humanoid.MaxHealth)
+		end
+	end
 
--- Helper function to create adjustment buttons
-local function createButton(text, posY, callback)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0.9, 0, 0, 28)
-	btn.Position = UDim2.new(0.05, 0, 0, posY)
-	btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	btn.TextSize = 11
-	btn.Font = Enum.Font.Gotham
-	btn.Text = text
-	
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 4)
-	corner.Parent = btn
-	
-	btn.MouseButton1Click:Connect(function()
-		callback()
-		updateLabel()
-	end)
-	
-	btn.Parent = frame
+	if newHealth then
+		-- Prevent accidental client-side death state if testing 0 HP
+		if newHealth <= 0 then
+			humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+		end
+		targetHP = newHealth
+		humanoid.Health = newHealth
+	end
 end
 
--- Coordinate Control Bindings
-createButton("Reset to Default (0, 0.5, 1.2)", 60, function()
-	customOffset = Vector3.new(0, 0.5, 1.2)
+applyBtn.MouseButton1Click:Connect(applyClientHP)
+hpBox.FocusLost:Connect(function(enterPressed)
+	if enterPressed then
+		applyClientHP()
+	end
 end)
 
-createButton("X +0.5 (Right) / X -0.5 (Left)", 93, function()
-	customOffset = Vector3.new(customOffset.X == 0 and 0.5 or (customOffset.X == 0.5 and -0.5 or 0), customOffset.Y, customOffset.Z)
+lockBtn.MouseButton1Click:Connect(function()
+	isLocked = not isLocked
+	if isLocked then
+		lockBtn.Text = "LOCK HP: ON"
+		lockBtn.BackgroundColor3 = Color3.fromRGB(35, 95, 55)
+		lockBtn.TextColor3 = Color3.fromRGB(120, 255, 160)
+		if not targetHP then applyClientHP() end
+	else
+		lockBtn.Text = "LOCK HP: OFF"
+		lockBtn.BackgroundColor3 = Color3.fromRGB(60, 35, 35)
+		lockBtn.TextColor3 = Color3.fromRGB(240, 120, 120)
+	end
 end)
 
-createButton("Y +0.5 (Up) / Y -0.5 (Down)", 126, function()
-	customOffset = Vector3.new(customOffset.X, customOffset.Y == 0.5 and 1.0 or (customOffset.Y == 1.0 and 0 or 0.5), customOffset.Z)
+-- Live Display & HP Lock Enforcement
+RunService.RenderStepped:Connect(function()
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if humanoid and humanoid.MaxHealth > 0 then
+		if isLocked and targetHP ~= nil and math.abs(humanoid.Health - targetHP) > 0.01 then
+			humanoid.Health = targetHP
+		end
+		local pct = math.floor((humanoid.Health / humanoid.MaxHealth) * 100 + 0.5)
+		statusLabel.Text = string.format("HP: %.0f / %.0f (%d%%)", humanoid.Health, humanoid.MaxHealth, pct)
+	else
+		statusLabel.Text = "HP: -- / -- (--%)"
+	end
 end)
-
-createButton("Z +0.5 (Forward - Out of head)", 159, function()
-	customOffset = customOffset + Vector3.new(0, 0, 0.5)
-end)
-
-createButton("Z -0.5 (Backward - Into head)", 192, function()
-	customOffset = customOffset - Vector3.new(0, 0, 0.5)
-end)
-
-createButton("Close Menu", 235, function()
-	frame.Visible = false
-	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-end)
-
-print("Position-Fixed, Rotation-Free Solid Camera loaded successfully!")
+print("loaded")
